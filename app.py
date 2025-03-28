@@ -1,70 +1,96 @@
 import streamlit as st
+import requests
 import pandas as pd
-import random
 
-st.set_page_config(page_title="NotTheSame Ads Optimizer", layout="wide")
-st.title("📡 NotTheSame Ads Optimizer — Meta Real-Time Preview v1.4")
+st.set_page_config(page_title="NotTheSame Ads Optimizer — Real-Time", layout="wide")
+st.title("📡 NotTheSame Ads Optimizer — Meta Real-Time v1.5")
 
-# Έλεγχος token
-token = st.secrets.get("META_ACCESS_TOKEN", None)
-if not token:
-    st.error("❌ Δεν βρέθηκε META_ACCESS_TOKEN. Βάλ' το στο Streamlit Secrets panel.")
+# Απόκτηση token από secrets
+access_token = st.secrets.get("META_ACCESS_TOKEN")
+if not access_token:
+    st.error("❌ Δεν υπάρχει access token. Πρόσθεσέ το στο Secrets του Streamlit.")
     st.stop()
 
-st.success("🔐 Token βρέθηκε - σύνδεση με Meta API επιτυχής!")
+# 1. Ανάκτηση διαθέσιμων ad accounts
+st.header("🔗 Σύνδεση με Meta")
+accounts_url = f"https://graph.facebook.com/v18.0/me/adaccounts?access_token={access_token}"
+accounts_res = requests.get(accounts_url)
 
-# Προσομοιωμένοι λογαριασμοί για preview (σε τελική μορφή θα έρχονται από API)
-accounts = {
-    '1234567890': 'Pharmacy Ads Account',
-    '0987654321': 'Sportswear Dynamic',
-    '1122334455': 'Beauty Campaigns'
+if accounts_res.status_code != 200:
+    st.error("⚠️ Σφάλμα κατά την ανάκτηση ad accounts.")
+    st.stop()
+
+accounts_data = accounts_res.json().get("data", [])
+account_options = {acc["name"]: acc["id"] for acc in accounts_data}
+
+if not account_options:
+    st.warning("Δεν βρέθηκαν διαθέσιμοι λογαριασμοί.")
+    st.stop()
+
+selected_account_name = st.selectbox("🧾 Επίλεξε Ad Account", list(account_options.keys()))
+selected_account_id = account_options[selected_account_name]
+
+# 2. Ανάκτηση campaign insights
+st.subheader(f"📊 Καμπάνιες για: {selected_account_name}")
+
+params = {
+    "fields": "name,objective,status,spend,actions,website_purchase_roas",
+    "date_preset": "last_7d",
+    "access_token": access_token
 }
+insights_url = f"https://graph.facebook.com/v18.0/act_{selected_account_id}/campaigns"
+campaigns_res = requests.get(insights_url, params=params)
 
-selected_account = st.selectbox("🧾 Επέλεξε Ad Account για Ανάλυση", options=list(accounts.keys()), format_func=lambda x: accounts[x])
+if campaigns_res.status_code != 200:
+    st.error("❌ Αποτυχία λήψης campaign δεδομένων.")
+    st.stop()
 
-st.info(f"📊 Αναλύοντας account: {accounts[selected_account]}")
+campaigns_data = campaigns_res.json().get("data", [])
+campaign_list = []
 
-# Mocked campaign performance data
-data = [
-    {
-        "Campaign Name": "Spring Launch",
-        "Objective": "Conversions",
-        "Spend (€)": round(random.uniform(50, 300), 2),
-        "Purchases": random.randint(5, 30),
-        "ROAS": round(random.uniform(0.8, 4.5), 2),
-        "Status": "Active"
-    },
-    {
-        "Campaign Name": "Retargeting",
-        "Objective": "Sales",
-        "Spend (€)": round(random.uniform(80, 250), 2),
-        "Purchases": random.randint(3, 25),
-        "ROAS": round(random.uniform(0.5, 3.5), 2),
-        "Status": "Paused"
-    },
-    {
-        "Campaign Name": "Awareness Boost",
-        "Objective": "Traffic",
-        "Spend (€)": round(random.uniform(100, 400), 2),
-        "Purchases": 0,
-        "ROAS": 0.0,
-        "Status": "Active"
-    }
-]
+# 3. Επεξεργασία καμπανιών
+for camp in campaigns_data:
+    name = camp.get("name", "Unnamed")
+    objective = camp.get("objective", "-")
+    status = camp.get("status", "-")
+    spend = float(camp.get("spend", 0))
+    roas = 0.0
+    purchases = 0
 
-df = pd.DataFrame(data)
-df['CPA'] = df.apply(lambda x: round(x['Spend (€)'] / x['Purchases'], 2) if x['Purchases'] > 0 else 0, axis=1)
+    actions = camp.get("actions", [])
+    for action in actions:
+        if action["action_type"] == "offsite_conversion.purchase":
+            purchases = int(float(action["value"]))
+        if action["action_type"] == "omni_purchase":
+            purchases = int(float(action["value"]))
 
-# Προτεινόμενες ενέργειες
-def suggest(row):
-    if row["ROAS"] < 1.2:
-        return "⛔ Χαμηλό ROAS – Επανεξέταση"
-    elif row["CPA"] > 20:
-        return "⚠️ Υψηλό CPA – Δοκιμή βελτιστοποίησης"
+    roas_data = camp.get("website_purchase_roas", [])
+    if isinstance(roas_data, list) and roas_data:
+        roas = float(roas_data[0].get("value", 0.0))
+
+    cpa = round(spend / purchases, 2) if purchases else 0
+
+    if roas < 1.5:
+        recommendation = "⛔ Χαμηλό ROAS – Scale Down"
+    elif cpa > 20:
+        recommendation = "⚠️ Υψηλό CPA – Optimize"
     else:
-        return "✅ Καλή Απόδοση – Συνέχισε"
+        recommendation = "✅ Scale Up"
 
-df["Πρόταση"] = df.apply(suggest, axis=1)
+    campaign_list.append({
+        "Campaign Name": name,
+        "Objective": objective,
+        "Status": status,
+        "Spend (€)": round(spend, 2),
+        "Purchases": purchases,
+        "ROAS": roas,
+        "CPA": cpa,
+        "💬 Recommendation": recommendation
+    })
 
-st.subheader("📈 Real-Time Απόδοση Καμπανιών")
-st.dataframe(df)
+# 4. Εμφάνιση αποτελεσμάτων
+if campaign_list:
+    df = pd.DataFrame(campaign_list)
+    st.dataframe(df)
+else:
+    st.info("Δεν υπάρχουν ενεργές καμπάνιες με δεδομένα για τις τελευταίες 7 μέρες.")
