@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-import io
+import re
 
 st.set_page_config(page_title="NotTheSame Ads Optimizer", layout="wide")
 st.title("📊 NotTheSame Ads Optimizer — Meta Real-Time & CSV Analysis")
@@ -27,28 +27,33 @@ if uploaded_file:
         st.subheader("🔍 Προεπισκόπηση Δεδομένων")
         st.dataframe(df.head())
 
-        # Lowercase version of all columns for mapping
-        df.columns = [col.strip() for col in df.columns]
-        lowercase_columns = {col.lower(): col for col in df.columns}
+        # Εμφάνιση όλων των στηλών που υπάρχουν
+        st.caption("🧠 Εντοπισμένες στήλες στο αρχείο:")
+        st.write(list(df.columns))
 
-        # Ορισμοί πιθανοτήτων για κάθε βασική στήλη
+        # Normalize function για αντιστοίχιση
+        def normalize(col):
+            return re.sub(r'[^a-z]', '', col.lower())
+
+        normalized_cols = {normalize(col): col for col in df.columns}
+
         column_mapping = {
-            'Campaign Name': ['campaign name', 'campaign', 'καμπάνια'],
-            'Amount Spent': ['amount spent', 'spend', 'δαπάνη'],
-            'Purchases': ['purchases', 'αγορές'],
-            'Purchase ROAS': ['purchase roas', 'roas', 'return on ad spend']
+            'Campaign Name': ['campaignname', 'campaign'],
+            'Amount Spent': ['amountspent', 'spend'],
+            'Purchases': ['purchases', 'αγορες'],
+            'Purchase ROAS': ['purchaseroas', 'roas', 'returnonadspend']
         }
 
         rename_dict = {}
-        for target_col, possible_names in column_mapping.items():
-            for name in possible_names:
-                if name in lowercase_columns:
-                    rename_dict[lowercase_columns[name]] = target_col
+        for target_col, patterns in column_mapping.items():
+            for pattern in patterns:
+                if pattern in normalized_cols:
+                    rename_dict[normalized_cols[pattern]] = target_col
                     break
 
         df = df.rename(columns=rename_dict)
 
-        # Έλεγχος για τις απαραίτητες στήλες
+        # Έλεγχος τελικών στηλών
         required_columns = ['Campaign Name', 'Amount Spent', 'Purchases', 'Purchase ROAS']
         if all(col in df.columns for col in required_columns):
             df['Amount Spent'] = pd.to_numeric(df['Amount Spent'], errors='coerce')
