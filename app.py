@@ -12,8 +12,6 @@ if not token:
     st.stop()
 
 st.success("🔗 Meta Access Token ενεργό!")
-
-# Διαχωριστικό
 st.markdown("---")
 
 # 📁 CSV Upload Module
@@ -30,10 +28,24 @@ if uploaded_file:
         st.subheader("🔍 Προεπισκόπηση Δεδομένων")
         st.dataframe(df.head())
 
-        # Υπολογισμός KPIs
-        st.subheader("📈 KPIs Ανάλυση")
+        # Column mapping για να εντοπίσει τις σωστές στήλες με βάση πιθανά aliases
+        column_mapping = {
+            'Campaign Name': ['Campaign Name', 'Campaign', 'Καμπάνια'],
+            'Amount Spent': ['Amount Spent', 'Spend', 'Δαπάνη'],
+            'Purchases': ['Purchases', 'Αγορές'],
+            'Purchase ROAS': ['Purchase ROAS', 'ROAS', 'Return on Ad Spend']
+        }
 
-        # Έλεγχος για βασικές στήλες
+        renamed_columns = {}
+        for target_col, possible_names in column_mapping.items():
+            for name in possible_names:
+                if name in df.columns:
+                    renamed_columns[name] = target_col
+                    break
+
+        df = df.rename(columns=renamed_columns)
+
+        # Έλεγχος για τις απαραίτητες στήλες
         required_columns = ['Campaign Name', 'Amount Spent', 'Purchases', 'Purchase ROAS']
         if all(col in df.columns for col in required_columns):
             df['Amount Spent'] = pd.to_numeric(df['Amount Spent'], errors='coerce')
@@ -41,6 +53,7 @@ if uploaded_file:
             df['Purchase ROAS'] = pd.to_numeric(df['Purchase ROAS'], errors='coerce')
             df['CPA'] = df['Amount Spent'] / df['Purchases']
             
+            st.subheader("📈 KPIs Ανάλυση")
             st.dataframe(df[['Campaign Name', 'Amount Spent', 'Purchases', 'Purchase ROAS', 'CPA']])
 
             st.subheader("🤖 Προτεινόμενες Ενέργειες")
@@ -55,7 +68,7 @@ if uploaded_file:
             df['Πρόταση'] = df.apply(suggest_action, axis=1)
             st.dataframe(df[['Campaign Name', 'Purchase ROAS', 'CPA', 'Πρόταση']])
         else:
-            st.warning("⚠️ Το αρχείο δεν περιέχει τις απαιτούμενες στήλες: 'Campaign Name', 'Amount Spent', 'Purchases', 'Purchase ROAS'")
+            st.warning(f"⚠️ Το αρχείο δεν περιέχει τις απαιτούμενες στήλες: {required_columns}")
     except Exception as e:
         st.error(f"❌ Σφάλμα κατά την ανάγνωση του αρχείου: {e}")
 else:
