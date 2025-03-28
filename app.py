@@ -23,27 +23,30 @@ if uploaded_file:
     try:
         df = pd.read_csv(uploaded_file)
         st.success("✅ Το αρχείο ανέβηκε επιτυχώς!")
-        
-        # Προεπισκόπηση
+
         st.subheader("🔍 Προεπισκόπηση Δεδομένων")
         st.dataframe(df.head())
 
-        # Column mapping για να εντοπίσει τις σωστές στήλες με βάση πιθανά aliases
+        # Lowercase version of all columns for mapping
+        df.columns = [col.strip() for col in df.columns]
+        lowercase_columns = {col.lower(): col for col in df.columns}
+
+        # Ορισμοί πιθανοτήτων για κάθε βασική στήλη
         column_mapping = {
-            'Campaign Name': ['Campaign Name', 'Campaign', 'Καμπάνια'],
-            'Amount Spent': ['Amount Spent', 'Spend', 'Δαπάνη'],
-            'Purchases': ['Purchases', 'Αγορές'],
-            'Purchase ROAS': ['Purchase ROAS', 'ROAS', 'Return on Ad Spend']
+            'Campaign Name': ['campaign name', 'campaign', 'καμπάνια'],
+            'Amount Spent': ['amount spent', 'spend', 'δαπάνη'],
+            'Purchases': ['purchases', 'αγορές'],
+            'Purchase ROAS': ['purchase roas', 'roas', 'return on ad spend']
         }
 
-        renamed_columns = {}
+        rename_dict = {}
         for target_col, possible_names in column_mapping.items():
             for name in possible_names:
-                if name in df.columns:
-                    renamed_columns[name] = target_col
+                if name in lowercase_columns:
+                    rename_dict[lowercase_columns[name]] = target_col
                     break
 
-        df = df.rename(columns=renamed_columns)
+        df = df.rename(columns=rename_dict)
 
         # Έλεγχος για τις απαραίτητες στήλες
         required_columns = ['Campaign Name', 'Amount Spent', 'Purchases', 'Purchase ROAS']
